@@ -1,0 +1,7 @@
+{
+    "configuration": "cpu=atmega328old",
+    "board": "arduino:avr:nano",
+    "sketch": "Battery_Capacity_Tester_V2.2.ino",
+    "port": "COM7",
+    "output": "./build"
+}
