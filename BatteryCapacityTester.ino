@@ -19,6 +19,16 @@
 // VREF_SCALE_CONSTANT = (1.1 * Vcc1 (per voltmeter) / Vcc2 (per getVcc() function)) * 1023 * 1000
 #define VREF_SCALE_CONSTANT 1125300
 
+#define TEMP_SENSOR // Define for NTC temperature sensor (thermistor)
+
+#ifdef TEMP_SENSOR
+#define TEMP_NOMINAL_R 10000  //Nominal resistance at 25⁰C
+#define TEMP_NOMINAL 25   // temperature for nominal resistance (almost always 25⁰ C)
+#define TEMP_BETA 3950  // The beta coefficient or the B value of the thermistor (usually 3000-4000) check the datasheet for the accurate value.
+#define TEMP_RREF 10000 //Value of  resistor used for the voltage divider
+#define K_TO_C 273.15
+#endif
+
 #define VBAT_THD_DEFUALT 2.80 // Default threshold for stopping test in Volts
 #define VBAT_THD_STEP 0.1
 #define VBAT_MAX_LEVEL 5.2
@@ -38,6 +48,11 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define BUZZER_PIN 9
 #define BAT_PIN A0
 
+#ifdef TEMP_SENSOR
+#define TEMP_CTRL_PIN 11   // Pin for providing Vcc voltage to thermistor
+#define TEMP_PIN      A1   // Analog input from thermistor 
+#endif
+
 Button Up_Button(2, 25, false, true);
 Button Down_Button(3, 25, false, true);
 
@@ -46,7 +61,6 @@ Button Down_Button(3, 25, false, true);
 #define HELLO_TIME 2000
 #define MEAS_COUNT 25
 #define LONG_PRESS_MS 1000
-#define MAX_STR_VAL_LEN 10
 #define DISPLAY_REFRESH_DELAY 300
 #define MEAS_LOOP_MAIN_DELAY 1000
 #define MEAS_LOOP_SHORT_DELAY 100
@@ -78,6 +92,11 @@ void setup()
   analogWrite(PWM_PIN, 0);
   Up_Button.begin();
   Down_Button.begin();
+#ifdef TEMP_SENSOR
+  pinMode(TEMP_PIN, INPUT);
+  pinMode(TEMP_CTRL_PIN, OUTPUT);
+  digitalWrite(TEMP_CTRL_PIN, LOW);
+#endif
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.clearDisplay();
@@ -250,6 +269,7 @@ void measLoop()
   int hour = 0, minute = 0, second = 0;
   float fCapacity;
   int curr, pwm;
+  float temp;
 
   previousMillis = millis();
   fCapacity = 0;
@@ -281,9 +301,10 @@ void measLoop()
       }
     }    
 
-    //************ Measuring Battery Voltage and Vcc ***********
+    //************ Measuring Battery Voltage ,Vcc and temperature ***********
     Vcc = getVcc();
     VBat = getVBat();
+    temp = getTemp();
 
     //************ Update PWM values ************
     getCurrAndPWM(PWMIndex, &curr, &pwm);
@@ -292,7 +313,7 @@ void measLoop()
     //************ Calculate capacity ***********
     fCapacity += (((float)MEAS_LOOP_MAIN_DELAY) / ((float)MS_TO_S) * curr) / ((float)S_TO_H);
 
-    displayMeas(second, minute, hour, curr, fCapacity);
+    displayMeas(second, minute, hour, curr, fCapacity, temp);
 
 #ifdef DEBUG
     Serial.print(hour);
@@ -358,7 +379,7 @@ void consumeButtonPress(Button *button)
 
 void displayLogo()
 {
-  display.setCursor(10, 25);
+  display.setCursor(9, 25);
   display.print(F("Bat Cap Tester V2.2"));
   display.display();
   delay(HELLO_TIME);
@@ -367,8 +388,6 @@ void displayLogo()
 
 void displayAdjCurr()
 {
-  char str[MAX_STR_VAL_LEN] = "";
-
   display.clearDisplay();
   display.setTextSize(2);
   display.setCursor(0, 0);
@@ -383,11 +402,9 @@ void displayAdjCurr()
   //Include Threshold and Vcc
   display.setCursor(0, 57);
   display.print("Thd=");
-  dtostrf(VBatThd, 5, 3, str);
-  display.print(str);
+  display.print(VBatThd, 3);
   display.print(", Vcc=");
-  dtostrf(Vcc, 5, 3, str);
-  display.print(str);
+  display.print(Vcc, 3);
 
   display.display();
 }
@@ -404,7 +421,7 @@ void displayUpDown(int curr, int pwm)
 
   display.setTextSize(2);
   display.setCursor(0, 18);
-  display.print("Curr=");
+  display.print("I=");
   display.print(curr);
   display.print("mA");
   display.setCursor(0, 35);
@@ -418,12 +435,11 @@ void displayUpDown(int curr, int pwm)
   display.display();
 }
 
-void displayMeas(int second, int minute, int hour, int curr, float fCapacity)
+void displayMeas(int second, int minute, int hour, int curr, float fCapacity, float temp)
 {
     display.clearDisplay();
     display.setTextSize(2);
     display.setCursor(32, 0);
-    // display.print(String(hour) + ":" + String(minute) + ":" + String(second));
     display.print(hour);
     display.print(":");
     display.print(minute);
@@ -432,39 +448,35 @@ void displayMeas(int second, int minute, int hour, int curr, float fCapacity)
 
     display.setTextSize(1);
     display.setCursor(0, 25);
-    display.print(F("I="));
-    // display.print(String(Current[PWMIndex])+"mA");
+    display.print(F("Thd="));
+    display.print(VBatThd, 1);
+    display.print(F(", I="));
     display.print(curr);
-    display.print("mA");
-    display.print(F(", Vcc="));
-    display.print(Vcc, 3);
+    display.print(F("mAh"));
 
     display.setCursor(2, 40);
-    // display.print("Bat Volt:" + String(VBat)+"V" );
-    display.print(F("Vbat="));
+    display.print(F("Vcc="));
+    display.print(Vcc, 3);
+    display.print(F(", Vbat="));
     display.print(VBat, 3);
-    display.print(F(", Thd="));
-    display.print(VBatThd, 3);
+
 
     display.setCursor(2, 55);
-    // display.print("capacity:" + String(capacity) + "mAh");
-    display.print(F("CAPACITY="));
+    display.print(F("CAP="));
     display.print(fCapacity, 1);
-    display.print("mAh");
+    display.print("mAh, T=");
+    display.print(temp, 1);
 
     display.display();
 }
 
 void displayCapacity(float fCapacity)
 {
-  char str[MAX_STR_VAL_LEN] = "";
-
   display.clearDisplay();
   display.setTextSize(2);
   display.setCursor(2, 0);
   display.print(F("Capacity:"));
   display.setCursor(2, 23);
-  // display.print(String(capacity) + "mAh");
   display.print(fCapacity, 1);
   display.print(F("mAh"));
 
@@ -472,11 +484,9 @@ void displayCapacity(float fCapacity)
   display.setTextSize(1);
   display.setCursor(0, 57);
   display.print("VBat=");
-  dtostrf(VBat, 5, 3, str);
-  display.print(str);
+  display.print(VBat, 3);
   display.print(", Thd=");
-  dtostrf(VBatThd, 5, 3, str);
-  display.print(str);
+  display.print(VBatThd, 3);
 
   display.display();
 }
@@ -533,4 +543,33 @@ float getVcc()
   result = VREF_SCALE_CONSTANT / result; // Calculate Vcc
 
   return ((float)result) / 1000.0; // Vcc in millivolts to float
+}
+
+float getTemp()
+{
+  long result = 0;
+  float temperature;
+
+  digitalWrite(TEMP_CTRL_PIN, HIGH);
+  analogReference(DEFAULT);
+  for (int i = 0; i < MEAS_COUNT; i++)
+  {
+    delay(2);
+    result += analogRead(TEMP_PIN); //read the thermistor output
+  }
+  digitalWrite(TEMP_CTRL_PIN, LOW);
+
+  result /= MEAS_COUNT;
+
+  // Calculate NTC resistance
+  temperature = ((float)ADC_MAX_VALUE) / ((float)result) - 1;
+  temperature = TEMP_RREF / temperature;
+  temperature = temperature / ((float)TEMP_NOMINAL_R); // (R/Ro)
+  temperature = log(temperature); // ln(R/Ro)
+  temperature /= TEMP_BETA; // 1/B * ln(R/Ro)
+  temperature += 1.0 / (TEMP_NOMINAL + K_TO_C); // + (1/To)
+  temperature = 1.0 / temperature; // Invert
+  temperature -= K_TO_C; // convert absolute temp to C
+
+  return temperature;
 }
