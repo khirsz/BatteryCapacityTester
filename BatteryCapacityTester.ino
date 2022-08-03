@@ -51,6 +51,8 @@ Button Down_Button(3, 25, false, true);
 #define MEAS_LOOP_MAIN_DELAY 1000
 #define MEAS_LOOP_SHORT_DELAY 100
 #define ADC_MAX_VALUE 1023
+#define MS_TO_S 1000
+#define S_TO_H  3600
 
 //Desired Current steps with a 3R load (R7)
 #define PWM_ARRAY_SIZE 12
@@ -246,11 +248,11 @@ void getCurrAndPWM(int idx, int *pCurrent, int *pPWM)
 void measLoop()
 {
   int hour = 0, minute = 0, second = 0;
-  unsigned long capacity;
   float fCapacity;
   int curr, pwm;
 
   previousMillis = millis();
+  fCapacity = 0;
 
   while (true)
   {
@@ -283,14 +285,12 @@ void measLoop()
     Vcc = getVcc();
     VBat = getVBat();
 
-    //************ Update PWM values ***********
+    //************ Update PWM values ************
     getCurrAndPWM(PWMIndex, &curr, &pwm);
     analogWrite(PWM_PIN, pwm);
 
     //************ Calculate capacity ***********
-    capacity = ((unsigned long)hour * 3600) + ((unsigned long)minute * 60) + (unsigned long)second;
-    fCapacity = ((float)capacity * curr) / 3600.0;
-
+    fCapacity += (((float)MEAS_LOOP_MAIN_DELAY) / ((float)MS_TO_S) * curr) / ((float)S_TO_H);
 
     displayMeas(second, minute, hour, curr, fCapacity);
 
